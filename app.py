@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+from dotenv import load_dotenv
+load_dotenv()
+from flask import Flask, render_template_string, jsonify, request
+import subprocess
+import re
+import os
+import json
+
+app = Flask(__name__)
+
+INDEX_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SSDP Release Notes</title>
+
+<style>
+    :root {
+        --bg: #f3f4f6;
+        --panel: #ffffff;
+        --primary: #2f5bea;
+        --text: #111827;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Segoe UI", Inter, system-ui, sans-serif;
+        background: linear-gradient(180deg, #f6f7f9, #eef0f3);
+        color: var(--text);
+    }
+
+    .panel {
+        width: 440px;
+        background: var(--panel);
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        box-shadow: 0 25px 50px rgba(0,0,0,0.08);
+        padding: 28px 32px 36px;
+        text-align: center;
+    }
+
+    .logo { margin-bottom: 12px; }
+
+    h1 {
+        font-size: 21px;
+        font-weight: 600;
+        margin: 0 0 6px;
+    }
+
+    .subtitle {
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 24px;
+    }
+
+    label {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 6px;
+        color: var(--muted);
+        text-align: left;
+    }
+
+    input {
+        width: 100%;
+        padding: 12px 14px;
+        font-size: 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        outline: none;
+        margin-bottom: 18px;
+    }
+
+    input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(47,91,234,0.12);
+    }
+
+    button {
+        width: 100%;
+        padding: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 8px;
+        border: none;
+        background: var(--primary);
+        color: #fff;
+        cursor: pointer;
+    }
+
+    button:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+    .spinner {
+        width: 26px;
+        height: 26px;
+        margin: 26px auto 10px;
+        border: 3px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        display: none;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .status {
+        font-size: 13px;
+        color: var(--muted);
+        display: none;
+    }
+
+    .footer {
+        margin-top: 28px;
+        font-size: 11px;
+        color: var(--muted);
+    }
+</style>
+</head>
+
+<body>
+<div class="panel">
+
+    <div class="logo">
+        <svg width="160" height="28" viewBox="0 0 160 28">
+            <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
+                  font-size="18" font-weight="600"
+                  letter-spacing="4"
+                  fill="#111827">
+                STELLANTIS
+            </text>
+        </svg>
+    </div>
+
+    <h1>SSDP Release Notes</h1>
+    <div class="subtitle">Generating PPROD Release notes</div>
+
+    <label for="week">Release Week</label>
+    <input id="week" placeholder="e.g. 45" />
+
+    <label for="year">Year (optional)</label>
+    <input id="year" placeholder="e.g. 2026" />
+
+    <button id="start">Generate & Open</button>
+
+    <div class="spinner" id="spinner"></div>
+    <div class="status" id="status">Redirecting to release notes…</div>
+    <div class="status" id="gap-info" style="color: #2f5bea; font-weight: 500;"></div>
+
+    <div class="footer">Internal Use Only · Stellantis SSDP</div>
+</div>
+
+<script>
+    const start = document.getElementById("start");
+    const spinner = document.getElementById("spinner");
+    const status = document.getElementById("status");
+    const gapInfo = document.getElementById("gap-info");
+    const week = document.getElementById("week");
+    const year = document.getElementById("year");
+
+    start.onclick = async () => {
+        start.disabled = true;
+        spinner.style.display = "block";
+        status.style.display = "block";
+        gapInfo.style.display = "none";
+
+        let url = "/run";
+        const rawWeek = week.value.trim();
+        const rawYear = year.value.trim();
+        if (rawWeek) {
+            // normalize week digits (allow W50 or 50)
+            const weekDigits = rawWeek.replace(/^W/i, "").padStart(2, "0");
+            if (rawYear) {
+                url += "?week=" + encodeURIComponent(`${rawYear}-W${weekDigits}`);
+            } else {
+                url += "?week=" + encodeURIComponent(rawWeek);
+            }
+        }
+
+        try {
+            const resp = await fetch(url);
+            const data = await resp.json();
+
+            if (!resp.ok || !data.success) {
+                status.innerText = data.error || data.message || "Failed to generate release notes";
+                status.style.color = "#ef4444";
+                return;
+            }
+
+            if (data.success) {
+                // Handle "No releases this week" case
+                if (!data.page_url && data.message) {
+                    status.innerText = data.message;
+                    status.style.color = "#f59e0b"; // Orange color for warning
+                    return;
+                }
+                
+                if (data.page_url) {
+                    status.innerHTML = `Successfully published release notes. <a href="${data.page_url}" target="_blank" rel="noopener noreferrer">Open page</a>`;
+                    if (data.filled_gaps > 0) {
+                        gapInfo.innerText = `Published ${data.filled_gaps} missing week${data.filled_gaps > 1 ? 's' : ''} + target week`;
+                        gapInfo.style.display = "block";
+                        setTimeout(() => {
+                            window.open(data.page_url, '_blank');
+                        }, 2000);
+                    } else {
+                        window.open(data.page_url, '_blank');
+                    }
+                    return;
+                }
+            }
+
+            status.innerText = "Release generated but no page URL returned";
+        } catch (e) {
+            status.innerText = "Error while generating release notes";
+        } finally {
+            spinner.style.display = "none";
+            start.disabled = false;
+        }
+    };
+</script>
+</body>
+</html>
+"""
+
+@app.route("/")
+def index():
+    return render_template_string(INDEX_HTML)
+
+def run_cmd(cmd):
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    return proc.returncode, proc.stdout, proc.stderr
+
+@app.route("/run")
+def run_workflow():
+    week = request.args.get("week")
+    if not week or not week.strip():
+        week = None
+
+    # Check for unpublished weeks with updates
+    check_cmd = ["python3", "check_gaps.py"]
+    if week:
+        check_cmd += ["--week", week]
+    
+    code, out, err = run_cmd(check_cmd)
+    unpublished_weeks = []
+    
+    if out:
+        try:
+            gap_result = json.loads(out)
+            unpublished_weeks = gap_result.get("unpublished_weeks", [])
+        except Exception:
+            pass
+
+    # Cap historical backfill to most recent 3 unpublished weeks.
+    # This keeps generation bounded for older gaps.
+    capped_unpublished_weeks = unpublished_weeks[-3:] if len(unpublished_weeks) > 3 else unpublished_weeks
+    
+    # Process unpublished weeks first, then target week
+    weeks_to_process = capped_unpublished_weeks + ([week] if week else [None])
+    published_urls = []
+    skipped_no_release_weeks = set()
+    
+    for process_week in weeks_to_process:
+        extract_cmd = ["python3", "extract.py"]
+        if process_week:
+            extract_cmd += ["--week", process_week]
+
+        code, out, err = run_cmd(extract_cmd)
+        if code != 0:
+            return jsonify({"success": False, "error": f"Extract failed for week {process_week}: {err or out}"})
+
+        summarize_cmd = ["python3", "summarize.py"]
+        if process_week:
+            summarize_cmd += ["--week", process_week]
+
+        code, out, err = run_cmd(summarize_cmd)
+        if code != 0:
+            return jsonify({"success": False, "error": f"Summarize failed for week {process_week}: {err or out}"})
+
+        # Check if there are any NEW releases by checking if summary file was updated meaningfully
+        # Look for a summary JSON output or check the summary_meta.json file
+        has_new_releases = False
+        try:
+            # Check if summary_meta.json exists and has release info
+            if os.path.exists("summary_meta.json"):
+                with open("summary_meta.json", "r") as f:
+                    summary_meta = json.load(f)
+                    
+                    # First check if there's a has_releases flag (new approach)
+                    if "has_releases" in summary_meta:
+                        has_new_releases = summary_meta.get("has_releases", False)
+                    else:
+                        # Fallback: Count components with actual new versions (not None)
+                        curr_versions = summary_meta.get("curr_versions", {})
+                        actual_releases = sum(1 for v in curr_versions.values() if v and v != "None" and v.strip())
+                        has_new_releases = actual_releases > 0
+            else:
+                # If no meta file, assume there are releases to be safe
+                has_new_releases = True
+        except Exception:
+            # If we can't parse, assume there are releases to be safe
+            has_new_releases = True
+
+        # If there are no releases for this week, skip publishing.
+        if not has_new_releases:
+            skipped_no_release_weeks.add(process_week or "current")
+            continue
+
+        publish_cmd = ["python3", "publish.py"]
+        if process_week:
+            publish_cmd += ["--week", process_week]
+            
+        code, out, err = run_cmd(publish_cmd)
+        if code != 0:
+            return jsonify({"success": False, "error": f"Publish failed for week {process_week}: {err or out}"})
+
+        combined = (out or "") + "\n" + (err or "")
+        url_found = False
+        for line in combined.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("CONFLUENCE_PAGE_URL="):
+                page_url = stripped.split("=", 1)[1].strip()
+                published_urls.append({"week": process_week or "current", "url": page_url})
+                url_found = True
+                break
+
+        if not url_found:
+            output_preview = (combined or "").strip()
+            if len(output_preview) > 500:
+                output_preview = output_preview[:500] + "..."
+            return jsonify({
+                "success": False,
+                "error": f"Publish completed but no page URL was returned for week {process_week or 'current'}. Output: {output_preview or 'No output from publish.py'}"
+            })
+
+    target_week_key = week or "current"
+
+    # If target week has no releases, do not create/return a page URL.
+    if target_week_key in skipped_no_release_weeks:
+        return jsonify({
+            "success": True,
+            "page_url": None,
+            "message": "No releases this week",
+            "all_published": published_urls,
+            "filled_gaps": len(capped_unpublished_weeks)
+        })
+
+    # Return the last published URL (target week) as main URL
+    # If no pages were published, return appropriate message
+    if not published_urls:
+        return jsonify({
+            "success": True,
+            "page_url": None,
+            "message": "No releases this week",
+            "all_published": [],
+            "filled_gaps": 0
+        })
+    
+    # Check if the last entry has no URL (no releases case)
+    last_entry = published_urls[-1]
+    if last_entry.get("url") is None:
+        return jsonify({
+            "success": True,
+            "page_url": None,
+            "message": last_entry.get("message", "No releases this week"),
+            "all_published": published_urls,
+            "filled_gaps": len(capped_unpublished_weeks)
+        })
+    
+    main_url = last_entry["url"]
+    
+    return jsonify({
+        "success": True,
+        "page_url": main_url,
+        "all_published": published_urls,
+        "filled_gaps": len(capped_unpublished_weeks)
+    })
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)

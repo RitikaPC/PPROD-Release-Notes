@@ -1,0 +1,20 @@
+======= VDP_PROC_2-1.5.7 (IOTPF-15989) =======
+
+Issue: IOTPF-15989
+Summary: VDP_PROC_2-1.5.7
+Status: Ready for validation
+Owner: miguel.bartolomeu1
+Issue Type: Enabler Version - IOT PF
+Deploy PPROD Date: 2026-04-08
+
+Linked issues:
+
+Issue: VDP-3734
+Summary: [VDP_PROC][PROC2][CARCOM][TMTS][PROBLEM 1&2] Fix JDA mapping
+Status: Done
+Issue Type: Bug enabler - IOT PF - Team backlog
+
+Issue: VDP-3717
+Summary: [VDP_PROC] version <VDP_PROC_2 1.5.5> :: Missing vhl.eng[].eExt.battery information for batteryStateOfHealth
+Status: Done
+Issue Type: Bug enabler - IOT PF - Team backlog

@@ -1,0 +1,36 @@
+{
+  "week": "2026-W15",
+  "has_releases": true,
+  "prev_versions": {
+    "APIM": "11.19.0",
+    "EAH": "2.49.0",
+    "VDR": "None",
+    "DATACHAIN_MONITOR": "1.0.1",
+    "PATRIC-SSDP": "3.9.1",
+    "PATRIC": "2.17.5",
+    "VDP_PROC": "None",
+    "VDP_PROC_2": "2.33.1",
+    "VDP_STORE": "None",
+    "VDP_STORE_2": "1.6.9",
+    "VDP_DS": "2.11.5",
+    "VDP_DS_MON": "2.11.5",
+    "VDP_DS_SSDP": "None",
+    "VDP_DS_2": "1.0.6"
+  },
+  "curr_versions": {
+    "APIM": "None",
+    "EAH": "None",
+    "VDR": "None",
+    "DATACHAIN_MONITOR": "None",
+    "PATRIC-SSDP": "None",
+    "PATRIC": "None",
+    "VDP_PROC": "None",
+    "VDP_PROC_2": "1.5.7",
+    "VDP_STORE": "None",
+    "VDP_STORE_2": "None",
+    "VDP_DS": "None",
+    "VDP_DS_MON": "None",
+    "VDP_DS_SSDP": "None",
+    "VDP_DS_2": "None"
+  }
+}
